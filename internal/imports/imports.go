@@ -18,7 +18,6 @@ import (
 	"go/printer"
 	"go/token"
 	"io"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -107,6 +106,7 @@ func formatFile(fileSet *token.FileSet, file *ast.File, src []byte, adjust func(
 	mergeImports(fileSet, file)
 	sortImports(opt.LocalPrefix, fileSet, file)
 	imps := astutil.Imports(fileSet, file)
+	impsByGroup := make(map[int][]*ast.ImportSpec)
 	var spacesBefore []string // import paths we need spaces before
 	for _, impSection := range imps {
 		// Within each block of contiguous imports, see if any
@@ -117,6 +117,7 @@ func formatFile(fileSet *token.FileSet, file *ast.File, src []byte, adjust func(
 		for _, importSpec := range impSection {
 			importPath, _ := strconv.Unquote(importSpec.Path.Value)
 			groupNum := importGroup(opt.LocalPrefix, importPath)
+			impsByGroup[groupNum] = append(impsByGroup[groupNum], importSpec)
 			if groupNum != lastGroup && lastGroup != -1 {
 				spacesBefore = append(spacesBefore, importPath)
 			}
@@ -141,7 +142,7 @@ func formatFile(fileSet *token.FileSet, file *ast.File, src []byte, adjust func(
 		out = adjust(src, out)
 	}
 	if len(spacesBefore) > 0 {
-		out, err = addImportSpaces(bytes.NewReader(out), spacesBefore)
+		out, err = separateImportsIntoGroups(bytes.NewReader(out), impsByGroup)
 		if err != nil {
 			return nil, err
 		}
@@ -306,13 +307,12 @@ func matchSpace(orig []byte, src []byte) []byte {
 	return b.Bytes()
 }
 
-var impLine = regexp.MustCompile(`^\s+(?:[\w\.]+\s+)?"(.+)"`)
-
-func addImportSpaces(r io.Reader, breaks []string) ([]byte, error) {
+func separateImportsIntoGroups(r io.Reader, impsByGroup map[int][]*ast.ImportSpec) ([]byte, error) {
 	var out bytes.Buffer
 	in := bufio.NewReader(r)
 	inImports := false
 	done := false
+	impInserted := false
 	for {
 		s, err := in.ReadString('\n')
 		if err == io.EOF {
@@ -321,26 +321,38 @@ func addImportSpaces(r io.Reader, breaks []string) ([]byte, error) {
 			return nil, err
 		}
 
-		if !inImports && !done && strings.HasPrefix(s, "import") {
+		if !inImports && !done && strings.HasPrefix(s, "import") && strings.Contains(s, "(") {
 			inImports = true
+			fmt.Fprint(&out, s)
+			continue
 		}
-		if inImports && (strings.HasPrefix(s, "var") ||
-			strings.HasPrefix(s, "func") ||
-			strings.HasPrefix(s, "const") ||
-			strings.HasPrefix(s, "type")) {
+		if inImports && !impInserted {
+			for i := 0; i <= 4; i++ {
+				for _, imp := range impsByGroup[i] {
+					if imp.Name != nil {
+						fmt.Fprint(&out, imp.Name.Name, " ")
+					}
+					fmt.Fprint(&out, imp.Path.Value)
+					if imp.Comment != nil {
+						for _, comment := range imp.Comment.List {
+							fmt.Fprint(&out, " ", comment.Text)
+						}
+					}
+					out.WriteByte('\n')
+				}
+				out.WriteByte('\n')
+			}
+			impInserted = true
+			continue
+		}
+		if inImports && strings.Contains(s, ")") {
 			done = true
 			inImports = false
 		}
-		if inImports && len(breaks) > 0 {
-			if m := impLine.FindStringSubmatch(s); m != nil {
-				if m[1] == breaks[0] {
-					out.WriteByte('\n')
-					breaks = breaks[1:]
-				}
-			}
-		}
 
-		fmt.Fprint(&out, s)
+		if !inImports {
+			fmt.Fprint(&out, s)
+		}
 	}
 	return out.Bytes(), nil
 }

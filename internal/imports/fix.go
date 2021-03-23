@@ -38,8 +38,11 @@ var importToGroup = []func(localPrefix, importPath string) (num int, ok bool){
 		if localPrefix == "" {
 			return
 		}
-		for _, p := range strings.Split(localPrefix, ",") {
+		for i, p := range strings.Split(localPrefix, ",") {
 			if strings.HasPrefix(importPath, p) || strings.TrimSuffix(p, "/") == importPath {
+				if i == 0 {
+					return 4, true
+				}
 				return 3, true
 			}
 		}
