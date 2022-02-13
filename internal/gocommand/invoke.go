@@ -132,9 +132,19 @@ type Invocation struct {
 	Verb       string
 	Args       []string
 	BuildFlags []string
-	ModFlag    string
-	ModFile    string
-	Overlay    string
+
+	// If ModFlag is set, the go command is invoked with -mod=ModFlag.
+	ModFlag string
+
+	// If ModFile is set, the go command is invoked with -modfile=ModFile.
+	ModFile string
+
+	// If WorkFile is set, the go command is invoked with -workfile=WorkFile.
+	WorkFile string
+
+	// If Overlay is set, the go command is invoked with -overlay=Overlay.
+	Overlay string
+
 	// If CleanEnv is set, the invocation will run only with the environment
 	// in Env, not starting with os.Environ.
 	CleanEnv   bool
@@ -160,6 +170,9 @@ func (i *Invocation) runWithFriendlyError(ctx context.Context, stdout, stderr io
 }
 
 func (i *Invocation) run(ctx context.Context, stdout, stderr io.Writer) error {
+	if i.ModFile != "" && i.WorkFile != "" {
+		return fmt.Errorf("bug: go command invoked with both -modfile and -workfile")
+	}
 	log := i.Logf
 	if log == nil {
 		log = func(string, ...interface{}) {}
@@ -170,6 +183,11 @@ func (i *Invocation) run(ctx context.Context, stdout, stderr io.Writer) error {
 	appendModFile := func() {
 		if i.ModFile != "" {
 			goArgs = append(goArgs, "-modfile="+i.ModFile)
+		}
+	}
+	appendWorkFile := func() {
+		if i.WorkFile != "" {
+			goArgs = append(goArgs, "-workfile="+i.WorkFile)
 		}
 	}
 	appendModFlag := func() {
@@ -190,16 +208,19 @@ func (i *Invocation) run(ctx context.Context, stdout, stderr io.Writer) error {
 		// mod needs the sub-verb before flags.
 		goArgs = append(goArgs, i.Args[0])
 		appendModFile()
+		appendWorkFile()
 		goArgs = append(goArgs, i.Args[1:]...)
 	case "get":
 		goArgs = append(goArgs, i.BuildFlags...)
 		appendModFile()
+		appendWorkFile()
 		goArgs = append(goArgs, i.Args...)
 
 	default: // notably list and build.
 		goArgs = append(goArgs, i.BuildFlags...)
 		appendModFile()
 		appendModFlag()
+		appendWorkFile()
 		appendOverlayFlag()
 		goArgs = append(goArgs, i.Args...)
 	}
