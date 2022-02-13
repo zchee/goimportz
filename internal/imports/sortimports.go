@@ -255,8 +255,9 @@ func (x byImportSpec) Less(i, j int) bool {
 	ipath := importPath(x.specs[i])
 	jpath := importPath(x.specs[j])
 
-	igroup := importGroup(x.localPrefix, ipath)
-	jgroup := importGroup(x.localPrefix, jpath)
+	// force true seprateLocal for sort local package groups
+	igroup := importGroup(x.localPrefix, ipath, true)
+	jgroup := importGroup(x.localPrefix, jpath, true)
 	if igroup != jgroup {
 		return igroup < jgroup
 	}

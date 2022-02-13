@@ -1780,11 +1780,12 @@ var _ = []interface{}{bar.X, v1.Y, a.A, v2.V2, other.V3, thing.Thing, gow.Wrong}
 // to be added into a later group (num=3).
 func TestLocalPrefix(t *testing.T) {
 	tests := []struct {
-		name        string
-		modules     []packagestest.Module
-		localPrefix string
-		src         string
-		want        string
+		name          string
+		modules       []packagestest.Module
+		localPrefix   string
+		separeteLocal bool
+		src           string
+		want          string
 	}{
 		{
 			name: "one_local",
@@ -1807,6 +1808,50 @@ import (
 )
 
 const Y = bar.X
+const _ = runtime.GOOS
+`,
+		},
+		{
+			name: "three_prefixes_with_separate",
+			modules: []packagestest.Module{
+				{
+					Name:  "example.org/pkg",
+					Files: fm{"pkg.go": "package pkg \n const A = 1"},
+				},
+				{
+					Name:  "foo.com",
+					Files: fm{"bar/bar.go": "package bar \n const B = 1"},
+				},
+				{
+					Name:  "code.org/r/p",
+					Files: fm{"expproj/expproj.go": "package expproj \n const C = 1"},
+				},
+				{
+					Name:  "test.org/localprefix",
+					Files: fm{"localprefix.go": "package localprefix \n const D = 1"},
+				},
+			},
+			localPrefix:   "example.org/pkg,foo.com/,code.org",
+			separeteLocal: true,
+			src:           "package main \n const W = pkg.A \n const X = bar.B \n const Y = expproj.C \n const Z = localprefix.D \n const _ = runtime.GOOS",
+			want: `package main
+
+import (
+	"runtime"
+
+	"test.org/localprefix"
+
+	"example.org/pkg"
+
+	"foo.com/bar"
+
+	"code.org/r/p/expproj"
+)
+
+const W = pkg.A
+const X = bar.B
+const Y = expproj.C
+const Z = localprefix.D
 const _ = runtime.GOOS
 `,
 		},
@@ -1883,11 +1928,12 @@ const _ = runtime.GOOS
 				}}, tt.modules...),
 			}.test(t, func(t *goimportTest) {
 				options := &Options{
-					LocalPrefix: tt.localPrefix,
-					TabWidth:    8,
-					TabIndent:   true,
-					Comments:    true,
-					Fragment:    true,
+					LocalPrefix:   tt.localPrefix,
+					SepareteLocal: tt.separeteLocal,
+					TabWidth:      8,
+					TabIndent:     true,
+					Comments:      true,
+					Fragment:      true,
 				}
 				t.assertProcessEquals("test.com", "t.go", nil, options, tt.want)
 			})
