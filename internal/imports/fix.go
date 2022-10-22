@@ -31,6 +31,11 @@ import (
 	"github.com/zchee/goimportz/internal/gopathwalk"
 )
 
+type prefixWithIndex struct {
+	prefix string
+	index  int
+}
+
 // importToGroup is a list of functions which map from an import path to
 // a group number.
 var importToGroup = []func(localPrefix, importPath string, separateLocal bool) (num int, ok bool){
@@ -38,14 +43,35 @@ var importToGroup = []func(localPrefix, importPath string, separateLocal bool) (
 		if localPrefix == "" {
 			return
 		}
-		for i, p := range strings.Split(localPrefix, ",") {
-			if strings.HasPrefix(importPath, p) || strings.TrimSuffix(p, "/") == importPath {
-				if separateLocal {
-					return i + 2, true // +2 for stdlib and 3rd-party package groups
-				}
-				return 3, true
+
+		prefixes := strings.Split(localPrefix, ",")
+
+		prefixesWithIndices := make([]prefixWithIndex, 0, len(prefixes))
+		for i, prefix := range prefixes {
+			pi := prefixWithIndex{
+				prefix: prefix,
+			}
+
+			if separateLocal {
+				pi.index = i + 2 // +2 for stdlib and 3rd-party package groups
+			} else {
+				pi.index = 3
+			}
+
+			prefixesWithIndices = append(prefixesWithIndices, pi)
+		}
+
+		sort.Slice(prefixesWithIndices, func(i, j int) bool {
+			// sort in reverse of lexicographically order
+			return prefixesWithIndices[i].prefix > prefixesWithIndices[j].prefix
+		})
+
+		for _, pi := range prefixesWithIndices {
+			if strings.HasPrefix(importPath, pi.prefix) || strings.TrimSuffix(pi.prefix, "/") == importPath {
+				return pi.index, true
 			}
 		}
+
 		return
 	},
 	func(_, importPath string, _ bool) (num int, ok bool) {
@@ -1086,7 +1112,6 @@ func addExternalCandidates(pass *pass, refs references, filename string) error {
 			defer wg.Done()
 
 			found, err := findImport(ctx, pass, found[pkgName], pkgName, symbols, filename)
-
 			if err != nil {
 				firstErrOnce.Do(func() {
 					firstErr = err

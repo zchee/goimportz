@@ -1207,7 +1207,6 @@ func TestSimpleCases(t *testing.T) {
 				}
 				t.assertProcessEquals("golang.org/fake", "x.go", nil, options, tt.out)
 			})
-
 		})
 	}
 }
@@ -1302,7 +1301,6 @@ func bar() {
 			}.processTest(t, "golang.org/fake", "x.go", nil, options, tt.out)
 		})
 	}
-
 }
 
 // Test support for packages in GOPATH that are actually symlinks.
@@ -1783,7 +1781,7 @@ func TestLocalPrefix(t *testing.T) {
 		name          string
 		modules       []packagestest.Module
 		localPrefix   string
-		separeteLocal bool
+		separateLocal bool
 		src           string
 		want          string
 	}{
@@ -1832,7 +1830,7 @@ const _ = runtime.GOOS
 				},
 			},
 			localPrefix:   "example.org/pkg,foo.com/,code.org",
-			separeteLocal: true,
+			separateLocal: true,
 			src:           "package main \n const W = pkg.A \n const X = bar.B \n const Y = expproj.C \n const Z = localprefix.D \n const _ = runtime.GOOS",
 			want: `package main
 
@@ -1916,6 +1914,49 @@ const Z = expproj.C
 const _ = runtime.GOOS
 `,
 		},
+		{
+			name: "nested_prefixes",
+			modules: []packagestest.Module{
+				{
+					Name:  "github.com/org/self",
+					Files: fm{"pkg/pkg.go": "package pkg \n const A = 1"},
+				},
+				{
+					Name:  "github.com/org/lib",
+					Files: fm{"lib.go": "package lib \n const B = 1"},
+				},
+				{
+					Name:  "github.com/org/kit",
+					Files: fm{"kit.go": "package kit \n const C = 1"},
+				},
+				{
+					Name:  "example.com/util",
+					Files: fm{"util.go": "package util \n const D = 1"},
+				},
+			},
+			localPrefix:   "github.com/org,github.com/org/self",
+			separateLocal: true,
+			src:           "package main \n const X = pkg.A \n const Y = lib.B \n const Z = kit.C \n const W = util.D \n const _ = runtime.GOOS",
+			want: `package main
+
+import (
+	"runtime"
+
+	"example.com/util"
+
+	"github.com/org/kit"
+	"github.com/org/lib"
+
+	"github.com/org/self/pkg"
+)
+
+const X = pkg.A
+const Y = lib.B
+const Z = kit.C
+const W = util.D
+const _ = runtime.GOOS
+`,
+		},
 	}
 
 	for _, tt := range tests {
@@ -1929,7 +1970,7 @@ const _ = runtime.GOOS
 			}.test(t, func(t *goimportTest) {
 				options := &Options{
 					LocalPrefix:   tt.localPrefix,
-					SepareteLocal: tt.separeteLocal,
+					SepareteLocal: tt.separateLocal,
 					TabWidth:      8,
 					TabIndent:     true,
 					Comments:      true,
@@ -2145,7 +2186,6 @@ var _, _ = fmt.Printf, bytes.Equal
 // Tests that sibling files - other files in the same package - can provide an
 // import that may not be the default one otherwise.
 func TestSiblingImports(t *testing.T) {
-
 	// provide is the sibling file that provides the desired import.
 	const provide = `package siblingimporttest
 
@@ -2224,7 +2264,6 @@ var _ = fmt.Printf
 			},
 		},
 	}.processTest(t, "foo.com", "pkg/uses.go", nil, nil, want)
-
 }
 
 // Tests that an input file's own package is ignored.
@@ -2531,7 +2570,6 @@ var _ = &bytes.Buffer{}
 			t.Errorf("Got:\n%s\nWant:\n%s", buf, want)
 		}
 	})
-
 }
 
 // Ensures a token as large as 500000 bytes can be handled
